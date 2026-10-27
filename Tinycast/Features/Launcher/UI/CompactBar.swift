@@ -2,7 +2,7 @@ import SwiftUI
 
 private typealias BarMotion = Theme.CompactBarMotion
 
-/// Where the capsule ends and each button rests, in a compact window exactly as wide as the panel.
+/// Where the capsule ends and each button rests inside the compact window.
 struct CompactBarGeometry {
     let width: CGFloat
     let height: CGFloat
@@ -15,7 +15,7 @@ struct CompactBarGeometry {
         height = metrics.size.compactHeight
         // A point inside the bar's height, so the last button clears the window's rounded end.
         diameter = height - metrics.scaled(1) * 2
-        gap = metrics.spacing.lg
+        gap = metrics.spacing.md
         self.count = count
     }
 
@@ -67,6 +67,25 @@ struct CompactBar: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .overlay { scrim(geometry: geometry, revealed: revealed) }
+        .overlay(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+                capsule.strokeBorder(edge, lineWidth: Theme.Size.hairline)
+                    .frame(width: geometry.capsuleWidth(revealed: revealed), height: geometry.height)
+                    .animation(
+                        reduceMotion ? nil : BarMotion.capsule.delay(BarMotion.revealDelay),
+                        value: revealed)
+                ForEach(commands.indices, id: \.self) { index in
+                    Circle().strokeBorder(edge, lineWidth: Theme.Size.hairline)
+                        .frame(width: geometry.diameter, height: geometry.diameter)
+                        .animation(fade(index)) { $0.opacity(revealed ? 1 : 0) }
+                        .scaleEffect(revealed ? 1 : BarMotion.parkedScale)
+                        .position(revealed ? geometry.center(of: index) : geometry.parked)
+                        .animation(travel(index), value: revealed)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         // Above the glass rather than inside it, where a morph would smear them.
         .overlay(alignment: .topLeading) {
             ForEach(Array(commands.enumerated()), id: \.element) { index, command in
@@ -110,7 +129,7 @@ struct CompactBar: View {
     }
 
     private func scrim(geometry: CompactBarGeometry, revealed: Bool) -> some View {
-        Theme.Colors.panelScrim
+        Theme.Colors.compactScrim
             .mask {
                 ZStack(alignment: .topLeading) {
                     Capsule().fill(.white)
@@ -139,13 +158,17 @@ struct CompactBar: View {
         _ command: CommandID, at index: Int, geometry: CompactBarGeometry, revealed: Bool
     ) -> some View {
         SymbolImage(
-            name: command.sfSymbol, size: metrics.scaled(Theme.Typography.headerIconSize),
-            monochrome: selection == command
+            name: symbol(for: command), size: metrics.scaled(Theme.Typography.compactShortcutSize),
+            weight: .medium, monochrome: true
         )
         .environment(\.symbolVariants, .none)
         .foregroundStyle(
-            selection == command ? Theme.Colors.compactShortcutSelectedInk : Theme.Colors.textSecondary
+            selection == command
+                ? Theme.Colors.compactShortcutSelectedInk : Theme.Colors.compactShortcutInk
         )
+        .frame(width: geometry.diameter, height: geometry.diameter)
+        // The clipboard's mass pools in its board below the light cap, so it reads low.
+        .offset(y: command == .clipboardHistory ? metrics.scaled(-0.5) : 0)
         .animation(fade(index)) {
             $0.opacity(revealed ? 1 : 0).blur(radius: revealed ? 0 : BarMotion.glyphBlur)
         }
@@ -163,6 +186,20 @@ struct CompactBar: View {
         .position(geometry.center(of: index))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private var edge: LinearGradient {
+        LinearGradient(
+            colors: [Theme.Colors.compactOutline, Theme.Colors.compactLowerEdge],
+            startPoint: .top, endPoint: .bottom)
+    }
+
+    private func symbol(for command: CommandID) -> String {
+        switch command {
+        case .clipboardHistory: "list.clipboard"
+        case .searchFiles: "folder"
+        default: command.sfSymbol
+        }
     }
 
     private func travel(_ index: Int) -> Animation? {

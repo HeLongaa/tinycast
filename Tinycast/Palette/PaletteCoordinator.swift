@@ -148,6 +148,10 @@ final class PaletteCoordinator {
         windowController.applyCollapsed(paletteIsCollapsed)
     }
 
+    func refreshCompactShadow() {
+        windowController.refreshCompactShadow()
+    }
+
     // MARK: - Dragging
 
     func beginPaletteDrag() {

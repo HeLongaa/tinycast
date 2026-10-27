@@ -263,9 +263,11 @@ selected button. Typing, pasting or clicking Search resets the selection. The Ap
 boundary-arrow hook handles navigation without moving input focus away from Search; marked IME text
 and modified arrows retain their normal editing behavior.
 
-Keyboard selection uses a filled circle and white monochrome glyph, without an outline. Symbols use
-`SymbolImage`, including the appearance-aware outline for Emoji & Symbols. Settings keeps each icon
-beside its name in a command menu, with borderless move/remove controls at the trailing edge.
+Shortcut glyphs use 20pt Medium monochrome `SymbolImage`, including the appearance-aware outline for
+Emoji & Symbols. The compact Clipboard and Files entries use the simpler `clipboard` and `folder`
+symbols; their command icons elsewhere stay unchanged. Keyboard selection uses a filled circle and
+white glyph without an extra selection ring. Settings keeps each command icon beside its name in a
+menu, with borderless move/remove controls at the trailing edge.
 The contrast fill sits behind the glyph above `GlassEffectContainer`, where the material cannot wash
 it out. Light uses a medium gray fill; Dark adds a subtle white wash over its existing glass selection.
 
@@ -276,6 +278,22 @@ its existing window. The summon reveal still animates independently.
 A shared scrim mask prevents overlapping surface fills from painting twice beneath the query.
 Selected Dark buttons keep their native glass scrim outside that mask to preserve their highlight.
 The original fill and travel timing is unchanged.
+
+Light's compact scrim is white at 0.78, separate from the expanded panel's 0.55. An inward 1pt edge
+grades from black 0.08 to 0.12, complementing the native glass edge without doubling it or clipping its
+rightmost border. The capsule edge follows its width; circular edges follow their glass and fade in
+with the glyphs rather than overlapping inside the query during the reveal. Light's empty prompt uses
+22pt Medium and black 0.53. Dark keeps its original surface and text colors, with no added edge.
+
+The compact window and the expanded panel share the same 750pt width; the compact bar has 8pt gaps
+between its 54pt shortcut buttons. Root launcher search uses 22pt text and a 22pt magnifying glass in
+a 26pt slot, 20pt horizontal insets and a 16pt icon gap in both states. Other screens retain their
+20pt search text. The launcher field's AppKit width measurement uses the same font and actual header insets.
+
+Light's compact window has an AppKit shadow outside its bounds. The controller briefly refreshes it
+with a display link during shape motion, ending at the springs' settling duration plus reveal and
+stagger delays. A weak callback target avoids a retain cycle; hiding, expanding, replacing the refresh
+or tearing down the controller stops it. Dark retains its existing compact shadow policy.
 
 At expanded launcher root, Escape clears the query while setting `forceExpanded`, so clearing and
 collapsing remain separate presses. The next Escape clears that flag and collapses; another closes.
@@ -290,7 +308,8 @@ layer would fill it. See [ui.md](../ui.md#panel-structure) for the shapes and th
 ## Window placement
 
 `PaletteWindowController` resolves an anchor (left edge + top edge) **once per summon** and reuses it
-for every compact↔expanded resize, so only the height changes and the top edge never drifts. The
+for every compact↔expanded resize, so the field's left and top edges never drift as both dimensions
+change. Each fresh summon centres the width of the state it opens in. The
 anchor is dropped on hide, so the next summon re-resolves for wherever the user is then.
 
 All of the arithmetic lives in `PalettePlacement`, which is CoreGraphics-only and takes every screen
@@ -299,7 +318,7 @@ fact as a parameter, so `palette-placement-test` drives the shipped rules rather
 The panel's width and height are not constants: they come from `InterfaceMetrics`, so Interface Size
 changes them. A change re-enters through `AppCore.track` → `applyInterfaceSize()`, which **drops the
 cached anchor** and re-resolves it — one rule, the summon's. An untouched palette re-centres at the new
-width; a dragged one keeps its stored horizontal centre unless the wider bar no longer leaves
+width; a dragged one keeps its stored left edge unless the bar no longer leaves
 `paletteMinimumVisible` on the display it opens on, in which case it falls home.
 
 ### Drag to reposition

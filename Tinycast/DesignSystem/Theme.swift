@@ -90,6 +90,7 @@ enum Theme {
         static let headerHeight: CGFloat = 36
         /// Fixed slot for the header glyph, so the field starts at one x in every mode.
         static let headerIconSlot: CGFloat = 22
+        static let launcherSearchIconSlot: CGFloat = 26
         /// The narrowest a strip squeezes the search field to: the caret and a few characters.
         static let searchFieldMinWidth: CGFloat = 60
         /// Room above the search row, constant so typing never shifts the bar.
@@ -349,9 +350,17 @@ enum Theme {
         /// Past the window's own close animation, so parking the buttons is never seen.
         static let parkAfterHide: TimeInterval = 0.3
         /// The capsule undershoots as it shortens, then settles.
-        static let capsule = Animation.spring(response: 0.44, dampingFraction: 0.62)
+        private static let capsuleSpring = Spring(response: 0.44, dampingRatio: 0.62)
+        static let capsule = Animation.spring(capsuleSpring)
         /// The buttons barely overshoot: the last rests on the window's edge, which would clip it.
-        static let button = Animation.spring(response: 0.44, dampingFraction: 0.86)
+        private static let buttonSpring = Spring(response: 0.44, dampingRatio: 0.86)
+        static let button = Animation.spring(buttonSpring)
+
+        static func shadowRefreshDuration(count: Int) -> TimeInterval {
+            revealDelay + max(
+                capsuleSpring.settlingDuration,
+                buttonSpring.settlingDuration + stagger * Double(max(count - 1, 0)))
+        }
     }
 
     enum MenuMotion {
@@ -369,6 +378,12 @@ enum Theme {
             ofSize: searchFieldSize, weight: .regular)
         static let headerIconSize: CGFloat = 18
         static let headerIcon = Font.system(size: headerIconSize, weight: .medium)
+        static let compactShortcutSize: CGFloat = 20
+        static let launcherSearchFieldSize: CGFloat = 22
+        static let launcherSearchIconSize: CGFloat = 22
+        static let launcherSearchField = Font.system(size: launcherSearchFieldSize, weight: .regular)
+        @MainActor static let launcherSearchFieldNSFont = NSFont.systemFont(
+            ofSize: launcherSearchFieldSize, weight: .regular)
         static let rowTitle = Font.body
         static let rowTrailing = Font.callout
         static let sectionHeader = Font.subheadline.weight(.medium)
@@ -446,6 +461,12 @@ enum Theme {
         static let controlPressed = ramp(dark: 0.24, light: 0.20)
         static let compactShortcutGlassSelection = ramp(dark: 1, light: 0)
         static let compactShortcutSelection = ramp(dark: 0.20, light: 0.55)
+        static let compactScrim = adaptive(
+            dark: .srgbInk(0, alpha: 0.40), light: .srgbInk(1, alpha: 0.78))
+        static let compactOutline = ramp(dark: 0, light: 0.08)
+        static let compactLowerEdge = ramp(dark: 0, light: 0.12)
+        static let compactPlaceholder = ramp(dark: 0.40, light: 0.53)
+        static let compactShortcutInk = ramp(dark: 0.60, light: 0.55)
         static let compactShortcutSelectedInk = adaptive(
             dark: .srgbInk(1, alpha: 1), light: .srgbInk(1, alpha: 1))
         /// Control borders: outlined kbd chips.

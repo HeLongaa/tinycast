@@ -86,6 +86,9 @@ struct InterfaceSizeTests {
         expect(m.size.headerHeight, Theme.Size.headerHeight, "size.headerHeight")
         expect(m.size.headerIconSlot, Theme.Size.headerIconSlot, "size.headerIconSlot")
         expect(
+            m.size.launcherSearchIconSlot, Theme.Size.launcherSearchIconSlot,
+            "size.launcherSearchIconSlot")
+        expect(
             m.size.searchFieldMinWidth, Theme.Size.searchFieldMinWidth, "size.searchFieldMinWidth")
         expect(m.size.headerPadding, Theme.Size.headerPadding, "size.headerPadding")
         expect(m.size.compactHeight, Theme.Size.compactHeight, "size.compactHeight")
@@ -169,9 +172,19 @@ struct InterfaceSizeTests {
         expect(m.size.volumeReadout, Theme.Size.volumeReadout, "size.volumeReadout")
 
         expect(m.typography.searchFieldSize, Theme.Typography.searchFieldSize, "typography.searchField")
+        expect(m.typography.searchFieldSize, 20, "other screens keep the 20pt search field")
+        expect(
+            m.typography.launcherSearchFieldSize, Theme.Typography.launcherSearchFieldSize,
+            "typography.launcherSearchFieldSize")
+        expect(
+            m.typography.launcherSearchIconSize, Theme.Typography.launcherSearchIconSize,
+            "typography.launcherSearchIconSize")
         expect(
             m.typography.searchFieldNSFont == Theme.Typography.searchFieldNSFont,
             "typography.searchFieldNSFont is the Theme font itself")
+        expect(
+            m.typography.launcherSearchFieldNSFont == Theme.Typography.launcherSearchFieldNSFont,
+            "typography.launcherSearchFieldNSFont is the Theme font itself")
         expect(
             m.typography.chipNSFont == Theme.Typography.chipNSFont,
             "typography.chipNSFont is the Theme font itself")
@@ -216,6 +229,26 @@ struct InterfaceSizeTests {
                 metrics.typography.searchFieldSize
                     == (Theme.Typography.searchFieldSize * size.scale).rounded(),
                 "the search field's stated size scales at \(size.rawValue)")
+            expect(
+                metrics.typography.launcherSearchFieldSize,
+                (Theme.Typography.launcherSearchFieldSize * size.scale).rounded(),
+                "the launcher search field scales at \(size.rawValue)")
+            expect(
+                metrics.typography.launcherSearchIconSize,
+                (Theme.Typography.launcherSearchIconSize * size.scale).rounded(),
+                "the launcher search icon scales at \(size.rawValue)")
+            expect(
+                metrics.typography.searchFieldNSFont.pointSize, metrics.typography.searchFieldSize,
+                "ordinary search measurement uses its rendered size at \(size.rawValue)")
+            expect(
+                metrics.typography.launcherSearchFieldNSFont.pointSize,
+                metrics.typography.launcherSearchFieldSize,
+                "launcher search measurement uses its rendered size at \(size.rawValue)")
+            expect(
+                metrics.typography.launcherSearchField
+                    == .system(
+                        size: metrics.typography.launcherSearchFieldNSFont.pointSize, weight: .regular),
+                "launcher text and attachment measurement use the same font at \(size.rawValue)")
         }
     }
 
@@ -257,6 +290,9 @@ struct InterfaceSizeTests {
             expect(
                 m.size.compactHeight, m.size.headerHeight + m.size.headerPadding * 2,
                 "the compact bar is the header in symmetric slack at \(size.rawValue)")
+            expect(
+                m.typography.launcherSearchIconSize <= m.size.launcherSearchIconSlot,
+                "the launcher search glyph fits its slot at \(size.rawValue)")
             expect(
                 m.size.menuRowHeight, m.size.menuIcon + m.spacing.md * 2,
                 "a menu row is its glyph slot plus breathing room at \(size.rawValue)")
@@ -307,9 +343,13 @@ struct InterfaceSizeTests {
             ("radius.glyph", m.radius.glyph), ("radius.attachmentChip", m.radius.attachmentChip),
             ("radius.card", m.radius.card), ("radius.keyCap", m.radius.keyCap),
             ("radius.tooltip", m.radius.tooltip),
-            ("size.panelWidth", m.size.panelWidth), ("size.panelHeight", m.size.panelHeight),
+            ("size.panelWidth", m.size.panelWidth),
+            ("size.panelHeight", m.size.panelHeight),
             ("size.headerHeight", m.size.headerHeight),
             ("size.headerIconSlot", m.size.headerIconSlot),
+            ("size.launcherSearchIconSlot", m.size.launcherSearchIconSlot),
+            ("typography.launcherSearchFieldSize", m.typography.launcherSearchFieldSize),
+            ("typography.launcherSearchIconSize", m.typography.launcherSearchIconSize),
             ("size.searchFieldMinWidth", m.size.searchFieldMinWidth),
             ("size.headerPadding", m.size.headerPadding),
             ("size.compactHeight", m.size.compactHeight),

@@ -63,6 +63,7 @@ struct InterfaceMetrics: Equatable, Sendable {
         var panelHeight: CGFloat { scaledPoints(Theme.Size.panelHeight, scale) }
         var headerHeight: CGFloat { scaledPoints(Theme.Size.headerHeight, scale) }
         var headerIconSlot: CGFloat { scaledPoints(Theme.Size.headerIconSlot, scale) }
+        var launcherSearchIconSlot: CGFloat { scaledPoints(Theme.Size.launcherSearchIconSlot, scale) }
         var searchFieldMinWidth: CGFloat { scaledPoints(Theme.Size.searchFieldMinWidth, scale) }
         var headerPadding: CGFloat { scaledPoints(Theme.Size.headerPadding, scale) }
         /// Derived, not scaled: the compact bar must stay exactly the header in symmetric slack.
@@ -146,6 +147,22 @@ struct InterfaceMetrics: Equatable, Sendable {
         let scale: CGFloat
 
         var searchFieldSize: CGFloat { scaledPoints(Theme.Typography.searchFieldSize, scale) }
+        var launcherSearchFieldSize: CGFloat {
+            scaledPoints(Theme.Typography.launcherSearchFieldSize, scale)
+        }
+        var launcherSearchIconSize: CGFloat {
+            scaledPoints(Theme.Typography.launcherSearchIconSize, scale)
+        }
+        var launcherSearchField: Font {
+            scale == 1
+                ? Theme.Typography.launcherSearchField
+                : .system(size: launcherSearchFieldSize, weight: .regular)
+        }
+        @MainActor var launcherSearchFieldNSFont: NSFont {
+            scale == 1
+                ? Theme.Typography.launcherSearchFieldNSFont
+                : NSFont.systemFont(ofSize: launcherSearchFieldSize, weight: .regular)
+        }
         var searchField: Font {
             scale == 1
                 ? Theme.Typography.searchField

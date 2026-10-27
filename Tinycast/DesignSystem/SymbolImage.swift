@@ -4,6 +4,7 @@ import SwiftUI
 struct SymbolImage: View {
     let name: String
     let size: CGFloat
+    var weight: Font.Weight = .regular
     var monochrome = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -23,7 +24,7 @@ struct SymbolImage: View {
             }
         } else {
             Image(systemName: SystemSymbolName.resolve(name, isDark: colorScheme == .dark))
-                .font(.system(size: size, weight: .regular))
+                .font(.system(size: size, weight: weight))
                 .symbolRenderingMode(monochrome ? .monochrome : .hierarchical)
         }
     }

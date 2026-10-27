@@ -11,7 +11,7 @@ struct PalettePlacementTests {
     // Exactly what `PaletteWindowController` passes, at the size the user picked.
     static let metrics = InterfaceMetrics.standard
     static let width = metrics.size.panelWidth
-    static let graspable = CGSize(width: width, height: metrics.size.compactHeight)
+    static let graspable = CGSize(width: metrics.size.panelWidth, height: metrics.size.compactHeight)
     static let minimumVisible = Theme.Size.paletteMinimumVisible
     static let snap = Theme.Size.paletteSnapDistance
     static let topFraction = Theme.Size.paletteTopMarginFraction
@@ -324,34 +324,53 @@ struct PalettePlacementTests {
     static let smallest = CGRect(x: 0, y: 0, width: 1440, height: 875)
 
     static func everyInterfaceSize() {
+        let shifted = CGRect(x: -1920, y: 200, width: 1920, height: 1055)
         for size in InterfaceSize.allCases {
             let metrics = size.metrics
-            let width = metrics.size.panelWidth
             let label = "at \(size.rawValue)"
+            let graspable = CGSize(
+                width: metrics.size.panelWidth, height: metrics.size.compactHeight)
 
-            for screen in [laptop, external, smallest] {
-                let anchor = PalettePlacement.defaultAnchor(
-                    in: screen, width: width, topMarginFraction: topFraction)
-                expect(anchor.x, screen.midX - width / 2, "the panel stays centred \(label)")
+            for screen in [laptop, external, smallest, shifted] {
+                for (mode, width, height) in [
+                    ("compact", metrics.size.panelWidth, metrics.size.compactHeight),
+                    ("expanded", metrics.size.panelWidth, metrics.size.panelHeight)
+                ] {
+                    let anchor = PalettePlacement.defaultAnchor(
+                        in: screen, width: width, topMarginFraction: topFraction)
+                    expect(
+                        anchor.x + width / 2, screen.midX,
+                        "the \(mode) panel stays centred \(label)")
+                    expect(
+                        anchor.y - height > screen.minY,
+                        "the \(mode) panel clears the bottom of the display \(label)")
+                }
+
+                let left = CGPoint(
+                    x: screen.minX - graspable.width + minimumVisible, y: screen.midY)
                 expect(
-                    anchor.y - metrics.size.panelHeight > screen.minY,
-                    "an expanded palette clears the bottom of a \(Int(screen.width))pt display \(label)"
-                )
-            }
+                    PalettePlacement.restored(
+                        left, graspable: graspable, visibleFrame: screen,
+                        minimumVisible: minimumVisible) == left,
+                    "the compact bar's minimum left sliver is restorable \(label)")
+                expect(
+                    PalettePlacement.restored(
+                        CGPoint(x: left.x - 1, y: left.y), graspable: graspable,
+                        visibleFrame: screen, minimumVisible: minimumVisible) == nil,
+                    "one point less of the compact bar's left sliver is rejected \(label)")
 
-            // The wider bar needs more of itself on screen, so a stored edge position can lapse.
-            let graspable = CGSize(width: width, height: metrics.size.compactHeight)
-            let sliver = CGPoint(x: laptop.maxX - minimumVisible, y: 900)
-            expect(
-                PalettePlacement.restored(
-                    sliver, graspable: graspable, visibleFrame: laptop,
-                    minimumVisible: minimumVisible) != nil,
-                "the minimum sliver is still grabbable \(label)")
-            expect(
-                PalettePlacement.restored(
-                    CGPoint(x: laptop.maxX, y: 900), graspable: graspable,
-                    visibleFrame: laptop, minimumVisible: minimumVisible) == nil,
-                "a bar dragged fully past the right edge is dropped \(label)")
+                let right = CGPoint(x: screen.maxX - minimumVisible, y: screen.midY)
+                expect(
+                    PalettePlacement.restored(
+                        right, graspable: graspable, visibleFrame: screen,
+                        minimumVisible: minimumVisible) == right,
+                    "the compact bar's minimum right sliver is restorable \(label)")
+                expect(
+                    PalettePlacement.restored(
+                        CGPoint(x: right.x + 1, y: right.y), graspable: graspable,
+                        visibleFrame: screen, minimumVisible: minimumVisible) == nil,
+                    "one point less of the compact bar's right sliver is rejected \(label)")
+            }
         }
     }
 }

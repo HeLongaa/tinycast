@@ -25,6 +25,7 @@ struct RootPaletteView: View {
     @Environment(ExtensionManager.self) private var extensions
     @Environment(AppSettings.self) private var settings
     @Environment(\.metrics) private var metrics
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @FocusState private var searchFocused: Bool
     /// Kept apart from the search field's own focus. See docs/features/palette.md.
@@ -400,7 +401,9 @@ struct RootPaletteView: View {
             }
             .onChange(of: compactCommands) {
                 compactSelection.reconcile(commands: compactCommands)
+                core.paletteCoordinator.refreshCompactShadow()
             }
+            .onChange(of: colorScheme) { core.paletteCoordinator.refreshCompactShadow() }
             // A preserved screen re-summons as it was left, so a menu must end with the palette.
             .modifier(PaletteHideObserver { if menuOpen { closeMenus() } })
             .onChange(of: vm.query) {
@@ -755,21 +758,19 @@ struct RootPaletteView: View {
 
     private var headerBar: some View {
         HStack(alignment: .center, spacing: 0) {
-            // Matches the list rows and section headers' own indent below.
-            headerGutter(width: metrics.spacing.md * 2)
+            headerGutter(width: headerHorizontalInset)
             // Every sub-screen leaves the same way, so the slot reads the same on all of them.
             if vm.mode != .launcher {
                 HeaderBackButton(help: backHelp, action: goBack)
             } else {
-                Image(systemName: vm.mode.systemImage)
-                    .font(metrics.typography.headerIcon)
-                    .symbolRenderingMode(.hierarchical)
+                SymbolImage(
+                    name: vm.mode.systemImage, size: metrics.typography.launcherSearchIconSize,
+                    monochrome: true)
                     .foregroundStyle(.secondary)
-                    .frame(width: metrics.size.headerIconSlot)
+                    .frame(width: headerIconSlot)
                     .windowDraggable(settings.paletteDraggable, onBegan: beginDrag, onEnded: endDrag)
             }
-            // slot + xl equals a row's icon + lg, so the query starts where the row titles do.
-            headerGutter(width: metrics.spacing.xl)
+            headerGutter(width: headerIconGap)
             // One structural position: a field inside a branch loses first responder when it flips.
             headerField
                 .simultaneousGesture(TapGesture().onEnded { resetCompactSelection() })
@@ -828,13 +829,29 @@ struct RootPaletteView: View {
                     accessory, isOpen: openMenu == .extensionAccessory,
                     action: toggleExtensionSearchAccessory)
             }
-            headerGutter(width: metrics.spacing.md * 2)
+            headerGutter(width: headerHorizontalInset)
         }
         // Identical metrics in both states, so typing can't move the search bar.
         .frame(height: metrics.size.headerHeight)
         .padding(.top, metrics.size.headerPadding)
         .padding(.bottom, isCollapsed ? metrics.size.headerPadding : 0)
         .frame(maxWidth: .infinity)
+    }
+
+    private var headerHorizontalInset: CGFloat {
+        vm.mode == .launcher ? metrics.spacing.xxl : metrics.spacing.md * 2
+    }
+
+    private var headerIconSlot: CGFloat {
+        vm.mode == .launcher ? metrics.size.launcherSearchIconSlot : metrics.size.headerIconSlot
+    }
+
+    private var headerIconGap: CGFloat {
+        vm.mode == .launcher ? metrics.spacing.md * 2 : metrics.spacing.xl
+    }
+
+    private var searchFont: Font {
+        vm.mode == .launcher ? metrics.typography.launcherSearchField : metrics.typography.searchField
     }
 
     /// Mode-gated ahead of the cast, which would otherwise cost every other mode a list build.
@@ -900,10 +917,11 @@ struct RootPaletteView: View {
 
     /// Capped to keep the strip on screen; empty, it measures the prompt so the strip follows it.
     private func searchFieldWidth(for accessory: PaletteHeaderAccessory) -> CGFloat {
-        let font = metrics.typography.searchFieldNSFont
+        let font = vm.mode == .launcher
+            ? metrics.typography.launcherSearchFieldNSFont : metrics.typography.searchFieldNSFont
         let text = vm.query.isEmpty ? searchPrompt : vm.query
         let typed = (text as NSString).size(withAttributes: [.font: font]).width
-        let chrome = metrics.size.headerIconSlot + metrics.spacing.md * 3 + metrics.spacing.xl
+        let chrome = headerIconSlot + headerIconGap + headerHorizontalInset * 2
         let room = metrics.size.panelWidth - accessory.width - chrome
         // +3pt so the caret sits after the last glyph rather than on top of it.
         return min(
@@ -925,7 +943,7 @@ struct RootPaletteView: View {
         @Bindable var vm = vm
         return TextField("", text: $vm.query)
             .textFieldStyle(.plain)
-            .font(metrics.typography.searchField)
+            .font(searchFont)
             .tint(Theme.Colors.textPrimary)
             .focused($searchFocused)
             // Fills the row's height, so there's no gap above it for topDragStrip to meet.
@@ -934,8 +952,12 @@ struct RootPaletteView: View {
                 // An IME's marked text leaves `query` empty, so the placeholder would overlap it.
                 if vm.query.isEmpty, !vm.isComposing {
                     Text(searchPrompt)
-                        .font(metrics.typography.searchField)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .font(
+                            vm.mode == .launcher && colorScheme == .light
+                                ? searchFont.weight(.medium) : searchFont)
+                        .foregroundStyle(
+                            vm.mode == .launcher
+                                ? Theme.Colors.compactPlaceholder : Theme.Colors.textTertiary)
                         .lineLimit(1)
                         // Never a click target: tapping the placeholder must still land the caret.
                         .allowsHitTesting(false)

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -21,6 +22,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     private let dropGuides = PaletteDropGuideController()
     /// ⌘V: `Edit ▸ Paste` claims it before `sendEvent` whenever the board also carries text.
     private var pasteMonitor: Any?
+    private var shadowDisplayLink: CADisplayLink?
+    private var shadowRefreshDeadline: ContinuousClock.Instant?
+    private lazy var shadowDisplayTarget = ShadowDisplayTarget(owner: self)
     /// ⌘esc: the window server claims it, so no keystroke is left for the responder chain to see.
     private lazy var commandEscapeTap = CommandEscapeTap { [weak self] in
         guard let self, self.panel?.isKeyWindow == true else { return }
@@ -37,6 +41,23 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         var lastRawAnchor: CGPoint
         var lastSampleTime: TimeInterval?
         var moved = false
+    }
+
+    @MainActor
+    private final class ShadowDisplayTarget: NSObject {
+        private weak var owner: PaletteWindowController?
+
+        init(owner: PaletteWindowController) {
+            self.owner = owner
+        }
+
+        @objc func refresh(_ displayLink: CADisplayLink) {
+            guard let owner else {
+                displayLink.invalidate()
+                return
+            }
+            owner.refreshShadowFrame(displayLink)
+        }
     }
 
     init(core: AppCore) {
@@ -91,8 +112,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             // Non-activating, so summoning never raises our own aux windows behind it.
             panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
-            // The corner is clipped in SwiftUI, so a stale square shadow rims the first frame.
-            panel.invalidateShadow()
+            refreshCompactShadow()
             // A never-activated login item can drop the first key request, so re-assert.
             DispatchQueue.main.async { [weak panel] in
                 guard let panel, panel.isVisible, !panel.isKeyWindow else { return }
@@ -103,6 +123,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
 
     // Isolated so teardown may touch the main-actor monitor; the block is already weak.
     isolated deinit {
+        shadowDisplayLink?.invalidate()
         if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
     }
 
@@ -150,6 +171,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     func hide(restoreFocus: Bool) {
+        stopCompactShadowRefresh()
         NotesPanel.refusesInheritedKey = previousOwnWindow?.isVisible != true
         panel?.orderOut(nil)
         NotesPanel.refusesInheritedKey = false
@@ -278,7 +300,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     /// A press on a drag handle passed the slop that makes it a drag; the guides follow the move.
     func beginDrag() {
         guard let panel, let screen = panel.screen ?? targetScreen() else { return }
-        let home = defaultAnchor(on: screen)
+        let home = defaultAnchor(on: screen, width: panel.frame.width)
         let current = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
         let candidate = PalettePlacement.snapped(
             current, home: home, visibleFrame: screen.visibleFrame,
@@ -325,7 +347,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             session.screenFrame = screen.frame
             session.visibleFrame = screen.visibleFrame
             session.displayKey = screen.displayKey
-            session.home = defaultAnchor(on: screen)
+            session.home = defaultAnchor(on: screen, width: panel?.frame.width ?? currentWidth)
             session.snap = PalettePlacement.Snap(anchor: moved, centeredX: false, height: nil)
             session.verticalEntryY = nil
         }
@@ -350,7 +372,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
                 home: session.home, screenFrame: session.screenFrame, dragged: snap.anchor)
         } else {
             dropGuides.show(
-                home: session.home, width: metrics.size.panelWidth,
+                home: session.home, width: panel?.frame.width ?? currentWidth,
                 screenFrame: session.screenFrame, dragged: snap.anchor)
         }
         if enteredHome {
@@ -471,6 +493,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     func applyCollapsed(_ collapsed: Bool) {
         guard let panel else { return }
         positionPanel(panel, collapsed: collapsed)
+        refreshCompactShadow()
     }
 
     /// A new width invalidates the placement the cached anchor encoded, so re-resolve it.
@@ -478,18 +501,66 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         guard let panel else { return }
         anchor = nil
         positionPanel(panel, collapsed: core.paletteCoordinator.paletteIsCollapsed)
+        refreshCompactShadow()
     }
 
-    /// Size to height and place against the session anchor, so the list grows downward.
+    /// Anchored at the top-left, so expanding grows downward without shifting the search field.
     private func positionPanel(_ panel: NSPanel, collapsed: Bool) {
-        guard let anchor = resolveAnchor() else { return }
+        stopCompactShadowRefresh()
         let size = metrics.size
+        guard let anchor = resolveAnchor(width: size.panelWidth) else { return }
         let height = collapsed ? size.compactHeight : size.panelHeight
         let frame = NSRect(
             x: anchor.x, y: anchor.y - height, width: size.panelWidth, height: height)
-        // A shadow is cut once from the window's alpha, so compact's moving glass relies on its own.
-        panel.hasShadow = !collapsed
+        panel.hasShadow = !collapsed || !panel.effectiveAppearance.isDark
         panel.setFrame(frame, display: true)
+    }
+
+    func refreshCompactShadow() {
+        stopCompactShadowRefresh()
+        guard let panel else { return }
+        let collapsed = core.paletteCoordinator.paletteIsCollapsed
+        panel.hasShadow = !collapsed || !panel.effectiveAppearance.isDark
+        guard panel.isVisible else { return }
+        refreshWindowShadow(panel)
+        guard collapsed, panel.hasShadow else { return }
+        let count = core.settings.compactBarCommands.filter(core.appIndex.isCommandEnabled).count
+        let animates = Motion.isEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let duration = animates ? Theme.CompactBarMotion.shadowRefreshDuration(count: count) : 0
+        shadowRefreshDeadline = ContinuousClock.now.advanced(by: .seconds(duration))
+        let displayLink = panel.displayLink(
+            target: shadowDisplayTarget, selector: #selector(ShadowDisplayTarget.refresh(_:)))
+        shadowDisplayLink = displayLink
+        displayLink.add(to: .main, forMode: .common)
+    }
+
+    private func refreshShadowFrame(_ displayLink: CADisplayLink) {
+        guard shadowDisplayLink === displayLink else {
+            displayLink.invalidate()
+            return
+        }
+        guard let panel, panel.isVisible, core.paletteCoordinator.paletteIsCollapsed,
+            !panel.effectiveAppearance.isDark
+        else {
+            stopCompactShadowRefresh()
+            return
+        }
+        refreshWindowShadow(panel)
+        if let shadowRefreshDeadline, ContinuousClock.now >= shadowRefreshDeadline {
+            stopCompactShadowRefresh()
+        }
+    }
+
+    private func refreshWindowShadow(_ panel: NSPanel) {
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+        panel.invalidateShadow()
+    }
+
+    private func stopCompactShadowRefresh() {
+        shadowDisplayLink?.invalidate()
+        shadowDisplayLink = nil
+        shadowRefreshDeadline = nil
     }
 
     /// The display to anchor to; never `NSScreen.main`, which follows the focused window.
@@ -498,38 +569,42 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     /// Cached until hide, so both placements read one `visibleFrame`; a drag outranks the setting.
-    private func resolveAnchor() -> CGPoint? {
+    private func resolveAnchor(width: CGFloat) -> CGPoint? {
         if let anchor { return anchor }
-        let resolved = targetScreen().flatMap { restoredAnchor(on: $0) ?? defaultAnchor(on: $0) }
+        let resolved = targetScreen().flatMap {
+            restoredAnchor(on: $0, width: width) ?? defaultAnchor(on: $0, width: width)
+        }
         anchor = resolved
         return resolved
     }
 
     /// This display's own corner, unless too little of the bar would stay grabbable.
-    private func restoredAnchor(on screen: NSScreen) -> CGPoint? {
+    private func restoredAnchor(on screen: NSScreen, width: CGFloat) -> CGPoint? {
         guard let offset = core.settings.palettePosition(on: screen.displayKey) else { return nil }
         let stored = PalettePlacement.anchor(for: offset, on: screen.visibleFrame)
         let position =
             core.settings.paletteExpandedCenterDisplays.contains(screen.displayKey)
             ? CGPoint(
-                x: defaultAnchor(on: screen).x,
+                x: defaultAnchor(on: screen, width: width).x,
                 y: PalettePlacement.expandedCenterY(
                     in: screen.visibleFrame, expandedHeight: metrics.size.panelHeight))
             : stored
         return PalettePlacement.restored(
             position,
-            graspable: CGSize(width: metrics.size.panelWidth, height: metrics.size.compactHeight),
+            graspable: CGSize(width: width, height: metrics.size.compactHeight),
             visibleFrame: screen.visibleFrame,
             minimumVisible: Theme.Size.paletteMinimumVisible)
     }
 
-    private func defaultAnchor(on screen: NSScreen) -> CGPoint {
+    private func defaultAnchor(on screen: NSScreen, width: CGFloat) -> CGPoint {
         PalettePlacement.defaultAnchor(
-            in: screen.visibleFrame, width: metrics.size.panelWidth,
+            in: screen.visibleFrame, width: width,
             topMarginFraction: Theme.Size.paletteTopMarginFraction)
     }
 
     private var metrics: InterfaceMetrics { core.settings.interfaceSize.metrics }
+
+    private var currentWidth: CGFloat { metrics.size.panelWidth }
 }
 
 extension NSScreen {

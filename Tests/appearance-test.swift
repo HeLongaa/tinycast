@@ -45,7 +45,7 @@ struct AppearanceTests {
         let c = Theme.Colors.self
 
         print("# dark branches are the shipped literals")
-        dark("panelScrim", c.panelScrim, is: Color.black.opacity(0.4))
+        dark("panelScrim", c.panelScrim, is: Color.black.opacity(0.05))
         dark("dialogDimming", c.dialogDimming, is: Color.black.opacity(0.34))
         dark("tooltipShadow", c.tooltipShadow, is: Color.black.opacity(0.18))
         dark("selection", c.selection, is: Color.white.opacity(0.10))

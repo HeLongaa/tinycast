@@ -428,7 +428,7 @@ enum Theme {
         }
 
         /// The ramp's inverse: the scrim darkens the dark surface and lightens the light one.
-        static let panelScrim = adaptive(dark: .srgbInk(0, alpha: 0.40), light: .srgbInk(1, alpha: 0.55))
+        static let panelScrim = adaptive(dark: .srgbInk(0, alpha: 0.05), light: .srgbInk(1, alpha: 0.05))
         static let dialogDimming = adaptive(
             dark: .srgbInk(0, alpha: 0.34), light: .srgbInk(0, alpha: 0.34))
         /// Find's marks, the Mac's own yellow: every match faint, the current one solid.
@@ -462,7 +462,7 @@ enum Theme {
         static let compactShortcutGlassSelection = ramp(dark: 1, light: 0)
         static let compactShortcutSelection = ramp(dark: 0.20, light: 0.55)
         static let compactScrim = adaptive(
-            dark: .srgbInk(0, alpha: 0.40), light: .srgbInk(1, alpha: 0.78))
+            dark: .srgbInk(0, alpha: 0.05), light: .srgbInk(1, alpha: 0.05))
         static let compactOutline = ramp(dark: 0, light: 0.08)
         static let compactLowerEdge = ramp(dark: 0, light: 0.12)
         static let compactPlaceholder = ramp(dark: 0.40, light: 0.53)

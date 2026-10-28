@@ -9,15 +9,14 @@ final class QuickActionPanelState {
         case running
         case finished
         case failed(String)
-        /// The pair is supported but not downloaded; the reader fetches it in System Settings.
-        case needsLanguageDownload
     }
 
     let action: QuickAction
     let original: String
     private(set) var output = ""
     private(set) var phase: Phase = .running
-    var targetLanguage: Locale.Language
+    /// The language this run translates into; the panel's menu swaps it for a retranslate.
+    var targetLanguage: TranslationLanguage?
 
     @ObservationIgnored private var cachedDiff: [TextDiffEngine.Chunk]?
 
@@ -33,7 +32,7 @@ final class QuickActionPanelState {
 
     var canReplace: Bool { phase == .finished && !output.isEmpty }
 
-    init(action: QuickAction, original: String, targetLanguage: Locale.Language) {
+    init(action: QuickAction, original: String, targetLanguage: TranslationLanguage?) {
         self.action = action
         self.original = original
         self.targetLanguage = targetLanguage
@@ -56,9 +55,5 @@ final class QuickActionPanelState {
 
     func fail(_ message: String) {
         phase = .failed(message)
-    }
-
-    func requireLanguageDownload() {
-        phase = .needsLanguageDownload
     }
 }

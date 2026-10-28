@@ -85,6 +85,8 @@ enum SettingsFileSchema {
         case .aiToolRounds: return bind(ai, \.toolRounds)
         case .aiCommands: return launcher.commandsBinding(for: key, owner: .ai)
         case .quickActionLanguage: return bind(quickActions, \.settings.targetLanguage)
+        case .quickActionSecondaryLanguage: return bind(quickActions, \.settings.secondaryLanguage)
+        case .quickActionTranslateMode: return bind(quickActions, \.settings.translateMode)
         case .quickActionCommands: return launcher.commandsBinding(for: key, owner: .quickActions)
         case .fileSearchEnabled: return bind(settings, \.fileSearchEnabled)
         case .fileSearchScopes: return bind(settings, \.fileSearchScopes)
@@ -189,6 +191,7 @@ extension DictationMode: SettingsFileRawValue {}
 extension DictationDestination: SettingsFileRawValue {}
 extension DictationIdleRelease: SettingsFileRawValue {}
 extension JoinWindow: SettingsFileRawValue {}
+extension TranslateMode: SettingsFileRawValue {}
 
 extension ClipboardRetention: SettingsFileToken {
     var settingsToken: SettingsFileJSON {

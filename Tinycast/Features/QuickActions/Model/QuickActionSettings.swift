@@ -1,12 +1,40 @@
 import Foundation
 
+enum TranslateMode: String, CaseIterable, Identifiable, Codable, Sendable {
+    case single
+    case pair
+
+    var id: Self { self }
+
+    var title: String {
+        self == .single ? String(localized: "One language") : String(localized: "Two languages")
+    }
+}
+
 struct QuickActionSettings: Equatable, Sendable {
     /// Only what the reader chose: an absent action takes its default, so a default may move later.
     var previewChoices: [BuiltInQuickAction: Bool] = [:]
 
-    /// BCP-47, e.g. `es-419`. Empty means the Mac's own language.
+    var translateMode: TranslateMode = .single
+
+    /// BCP-47, e.g. `es`. The single target, or the pair's primary. Empty means the Mac's own language.
     var targetLanguage: String = ""
+
+    /// BCP-47. The pair's secondary. Empty means the Mac's own language.
+    var secondaryLanguage: String = ""
+
     private(set) var instructionOverrides: [BuiltInQuickAction: String] = [:]
+
+    func translateTarget() -> TranslateTarget {
+        switch translateMode {
+        case .single:
+            return .single(TranslationLanguage.resolving(targetLanguage))
+        case .pair:
+            return .pair(
+                primary: TranslationLanguage.resolving(targetLanguage),
+                secondary: TranslationLanguage.resolving(secondaryLanguage))
+        }
+    }
 
     func previewsResult(_ action: QuickAction) -> Bool {
         switch action {
@@ -34,7 +62,7 @@ struct QuickActionSettings: Equatable, Sendable {
     }
 
     mutating func setInstructionOverride(_ instructions: String?, for action: BuiltInQuickAction) {
-        guard !action.usesTranslationFramework else { return }
+        guard action.allowsInstructions else { return }
         instructionOverrides[action] = instructions
     }
 
@@ -55,7 +83,7 @@ struct QuickActionSettings: Equatable, Sendable {
             instructionOverrides = Dictionary(
                 uniqueKeysWithValues: newValue.compactMap { key, value in
                     guard let action = BuiltInQuickAction(rawValue: key),
-                        !action.usesTranslationFramework
+                        action.allowsInstructions
                     else { return nil }
                     return (action, value)
                 })

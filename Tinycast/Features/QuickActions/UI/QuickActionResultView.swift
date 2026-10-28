@@ -4,12 +4,10 @@ struct QuickActionResultView: View {
 
     @Environment(\.metrics) private var metrics
     let state: QuickActionPanelState
-    let languages: [Locale.Language]
     let onReplace: () -> Void
     let onCopy: () -> Void
     let onCancel: () -> Void
-    let onRetranslate: (Locale.Language) -> Void
-    let onOpenLanguageSettings: () -> Void
+    let onRetranslate: (TranslationLanguage) -> Void
     let onHeight: (CGFloat) -> Void
 
     @State private var contentHeight: CGFloat = 0
@@ -97,7 +95,9 @@ struct QuickActionResultView: View {
                 Spacer(minLength: metrics.spacing.md)
             }
             .windowDraggable(true)
-            if state.action == .translate, !languages.isEmpty { languageMenu }
+            if let language = state.targetLanguage {
+                languageMenu(language)
+            }
         }
         .padding(.horizontal, metrics.spacing.xxl)
         .padding(.top, metrics.spacing.xl)
@@ -119,8 +119,6 @@ struct QuickActionResultView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(metrics.typography.rowTitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
-        case .needsLanguageDownload:
-            downloadPrompt
         }
     }
 
@@ -163,27 +161,10 @@ struct QuickActionResultView: View {
         }
     }
 
-    /// System Settings, not `prepareTranslation`: its sheet never appears over this panel.
-    private var downloadPrompt: some View {
-        let language = TextTranslator.displayName(of: state.targetLanguage)
-        return VStack(alignment: .leading, spacing: metrics.spacing.lg) {
-            VStack(alignment: .leading, spacing: metrics.spacing.xs) {
-                Text("\(language) hasn't been downloaded yet.")
-                    .font(metrics.typography.rowTitle)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                Text("Click **Translation Languages…** in Language & Region, then download it.")
-                    .font(metrics.typography.rowTrailing)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-            Button("Open Language & Region", action: onOpenLanguageSettings)
-                .buttonStyle(.modalAction(.standard, fillsWidth: false))
-        }
-    }
-
-    private var languageMenu: some View {
-        Menu(TextTranslator.displayName(of: state.targetLanguage)) {
-            ForEach(languages, id: \.minimalIdentifier) { language in
-                Button(TextTranslator.displayName(of: language)) { onRetranslate(language) }
+    private func languageMenu(_ language: TranslationLanguage) -> some View {
+        Menu(language.displayName(locale: .current)) {
+            ForEach(TranslationLanguage.menu) { option in
+                Button(option.displayName(locale: .current)) { onRetranslate(option) }
             }
         }
         .menuStyle(.button)
@@ -194,16 +175,28 @@ struct QuickActionResultView: View {
     private var footer: some View {
         HStack(spacing: metrics.spacing.md) {
             Spacer(minLength: metrics.spacing.md)
-            Button("Dismiss", action: onCancel)
-                .buttonStyle(.modalAction(.cancel, fillsWidth: false))
-            Button("Copy", action: onCopy)
-                .buttonStyle(.modalAction(.standard, fillsWidth: false))
+            footerButton("Dismiss", key: "Esc", role: .cancel, action: onCancel)
+            footerButton("Copy", key: "⌘C", role: .standard, action: onCopy)
                 .disabled(!state.canReplace)
-            Button("Replace", action: onReplace)
-                .buttonStyle(.modalAction(.primary, fillsWidth: false))
+            footerButton("Replace", key: "⏎", role: .primary, action: onReplace)
                 .disabled(!state.canReplace)
         }
         .padding(.horizontal, metrics.spacing.xxl)
         .padding(.vertical, metrics.spacing.xl)
+    }
+
+    private func footerButton(
+        _ title: LocalizedStringResource, key: String,
+        role: ModalActionButtonStyle.Role, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: metrics.spacing.sm) {
+                Text(key)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                Text(title)
+            }
+        }
+        .buttonStyle(.modalAction(role, fillsWidth: false))
     }
 }

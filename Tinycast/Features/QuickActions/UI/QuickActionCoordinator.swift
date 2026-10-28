@@ -73,7 +73,6 @@ final class QuickActionCoordinator {
         store.resolveModel(
             appleIntelligenceAvailable: core.aiSettings.isAppleIntelligenceAvailable(),
             fallback: core.aiSettings.defaultModel)
-        loadLanguages()
     }
 
     /// Enabling is consent: reading a selection and typing over it both need Accessibility.
@@ -234,7 +233,10 @@ final class QuickActionCoordinator {
             return
         }
         let state = QuickActionPanelState(
-            action: action, original: selection, targetLanguage: targetLanguage)
+            action: action, original: selection,
+            targetLanguage: action == .translate
+                ? QuickActionRunner.target(for: selection, in: store.settings.translateTarget())
+                : nil)
         let previews = store.settings.previewsResult(action)
         if previews { present(state, target: target) }
         await perform(state, target: target, previewing: previews)
@@ -274,10 +276,6 @@ final class QuickActionCoordinator {
             deliver(text, to: target, action: state.action)
         } catch is CancellationError {
             return
-        } catch let error as TextTranslator.Failure where error.needsDownload {
-            // A HUD cannot say where the download lives, so this has to become a panel.
-            if !previewing { present(state, target: target) }
-            state.requireLanguageDownload()
         } catch {
             report(error, state: state, previewing: previewing)
         }
@@ -304,13 +302,11 @@ final class QuickActionCoordinator {
     private func generate(
         _ state: QuickActionPanelState, streaming: Bool
     ) async throws -> String {
-        if state.action.usesTranslationFramework {
-            return try await TextTranslator.translate(state.original, to: state.targetLanguage)
-        }
         let provider = try core.quickActionProvider(for: state.action)
         return try await QuickActionRunner.run(
             state.action, selection: state.original, using: provider,
             instructionOverride: store.settings.instructionOverride(for: state.action),
+            target: state.targetLanguage,
             onDelta: { delta in
                 guard streaming else { return }
                 state.append(delta)
@@ -355,7 +351,6 @@ final class QuickActionCoordinator {
         panels.present(
             state,
             metrics: settings.interfaceSize.metrics,
-            languages: offeredLanguages,
             onRetranslate: { [weak self] language in
                 state.targetLanguage = language
                 self?.rerun(state, target: target)
@@ -368,30 +363,5 @@ final class QuickActionCoordinator {
     private func rerun(_ state: QuickActionPanelState, target: Target) {
         state.restart()
         start { [weak self] in await self?.perform(state, target: target, previewing: true) }
-    }
-
-    private var targetLanguage: Locale.Language {
-        let stored = store.settings.targetLanguage
-        guard !stored.isEmpty else { return Locale.current.language }
-        return Locale.Language(identifier: stored)
-    }
-
-    /// Observed, not ignored: it arrives after the pane has painted, and the picker has to notice.
-    private(set) var offeredLanguages: [Locale.Language] = []
-    @ObservationIgnored private var languageLoad: Task<Void, Never>?
-
-    func loadLanguages() {
-        guard offeredLanguages.isEmpty, languageLoad == nil else { return }
-        languageLoad = Task { [weak self] in
-            let languages = await TextTranslator.supportedLanguages()
-            self?.offeredLanguages = languages
-        }
-    }
-}
-
-extension TextTranslator.Failure {
-    var needsDownload: Bool {
-        if case .notInstalled = self { return true }
-        return false
     }
 }

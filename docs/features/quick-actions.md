@@ -2,9 +2,9 @@
 
 Act on whatever text is selected, in whatever app is frontmost. Four are shipped: Fix Grammar,
 Rewrite, Translate and Summarize, each with its own bindable shortcut **and its own launcher command**,
-both listed in **Settings → Quick Actions**. Three go through the AI provider layer; Translate goes to
-Apple's own translator. The result either replaces the selection or arrives in a floating panel, per
-action.
+both listed in **Settings → Quick Actions**. All four go through the AI provider layer; Translate names
+its own language — or a pair to swap between — and its own model. The result either replaces the
+selection or arrives in a floating panel, per action.
 
 A **custom Quick Action** is a name, a glyph and a prompt, run through the same provider. It takes a
 shortcut and a launcher row like any other.
@@ -40,14 +40,16 @@ selectable Markdown renderer with AI Chat.
   refuses a second while it lives; a generation token stops a task that finishes after being
   replaced — by a retranslate, say — from clearing the newer handle.
 - **`Model/` stays Foundation-only.** `quick-action-test` compiles that folder standalone, which is
-  what keeps `FoundationModels`, `Translation` and `NaturalLanguage` in `Service/` and `UI/`.
+  what keeps `TranslationLanguage` — the curated language list Translate's pickers draw from — in
+  `Model/` with the rest of the Foundation-only settings.
 - **Quick Actions route themselves.** `quickActionModel` is a second routing decision, defaulting to
   Apple Intelligence and falling back to chat's model. A shortcut pressed all day should not bill an
   API every time, and that is not a choice chat's default can make on its behalf.
 - **An action may override that route, and only by choice.** `quickActionModelOverrides` is keyed by
   `QuickAction.id`, so the built-in four and custom actions share one lookup,
   `QuickActionSettingsStore.model(for:)`. An absent entry follows `quickActionModel`, so nothing
-  changes until the reader picks a model in the action's sheet. Translate never takes one.
+  changes until the reader picks a model in the action's sheet. Translate takes its override from the
+  Translate section instead of a sheet, and it is the one override no instruction editor accompanies.
 - **A dead override is dropped, never rerouted.** Repair walks every override beside the shared
   route: a vanished catalog model moves to its command's first model, like the shared route, but a
   removed connection or an unavailable command deletes the entry instead of borrowing chat's model.
@@ -72,7 +74,8 @@ selectable Markdown renderer with AI Chat.
   is prepended and no control removes it.
 - **Each model action owns its instructions and its route.** The pencil on Fix Grammar, Rewrite and
   Summarize opens a sheet prefilled with the exact built-in prompt and the action's model. Saving
-  replaces both for only that action; Use Default restores the prompt. Translate has no editor because no model handles translation. The same
+  replaces both for only that action; Use Default restores the prompt. Translate has no editor because
+  its prompt is written from the language settings, not from prose the reader types. The same
   pencil on a custom action opens its editor, which owns the name and glyph too.
 - **A custom action never travels in a backup.** Neither the record, its shortcut nor its route, for
   the reason `quickActionInstructions` already doesn't: an import must never change what a shortcut
@@ -95,7 +98,7 @@ started.
 | --- | --- | --- | --- |
 | Fix Grammar | provider | replaces directly | yes |
 | Rewrite | provider | panel | yes |
-| Translate | Apple Translation | panel | no |
+| Translate | provider | panel | no |
 | Summarize | provider | panel, always | no |
 | a custom action | provider | panel | no |
 
@@ -146,33 +149,31 @@ whatever a missing key would have meant.
 
 ## Translation
 
-`TextTranslator` uses Apple's translator rather than the language model: it runs on device, costs
-nothing on every route, and a 3B model is markedly worse at it. `NLLanguageRecognizer` supplies the
-source language, because `TranslationSession(installedSource:target:)` needs a concrete one and
-`LanguageAvailability` reports only a status.
+Translate runs through the provider like the other three, with a prompt `QuickActionPrompt` writes
+from the language settings rather than a fixed string. It is always the one direct sentence —
+*Translate the text into X.* — because a conditional ("into Y if written in X, otherwise into X") is
+a prompt the model answers by echoing the text back.
 
-**A download is a locale, not a language.** Apple matches `en-US` and `en-GB` separately, so the bare
-`en` the recognizer reports finds only the first and calls an installed `en-GB` pair missing — which
-read as *Chinese hasn't been downloaded yet* on a Mac that had Chinese. Both sides are retried across
-every supported spelling of the same script before the panel names a language, and the language it
-names is the one with no downloaded asset of its own.
+**One language or two.** `TranslateMode` is `.single` — translate everything into `targetLanguage` —
+or `.pair` — swap between `targetLanguage` (the primary) and `secondaryLanguage`. Both are BCP-47
+strings, empty meaning the Mac's own language. In pair mode the coordinator resolves the target
+before the run: `QuickActionRunner.target(for:in:)` detects the source on device with
+`NLLanguageRecognizer` and picks the pair's other end, so the model only ever sees the direct
+sentence. Detection is in `Service/` because `Model/` stays Foundation-only. The pane shows one
+picker for the single mode and two for the pair, so a reader never sees a field the mode ignores.
 
-`TranslationError` is annotated `macOS 26.4` while the deployment floor is `26.0`, so failures are
-caught as plain `Error` and reported by what was asked rather than by matching its cases.
+**`TranslationLanguage` is a curated list, not the framework's.** The 41 entries are the ones worth
+offering a launcher reader; the model can reach more than Apple's on-device set, so the list is
+Tinycast's own rather than `LanguageAvailability`'s. Each case's `rawValue` is the English name the
+model is prompted with, its `code` is the BCP-47 identifier stored in settings, and
+`displayName(locale:)` is the reader's own name for the picker. Because the list is fixed and
+synchronous, the menu is a computed `TranslationLanguage.menu`, not the observed async state the
+framework list needed.
 
-**The picker offers Apple's own list, never the reader's preferred languages.** `supportedLanguages`
-is 47 entries on macOS 26 and is the framework's to change; building the menu from
-`Locale.preferredLanguages` instead would put a language the translator cannot reach in front of
-someone, where it could only fail at press time. Notably **Bengali is not among the 47**. The list
-loads asynchronously, so the coordinator holds it as observed state rather than a computed property.
-Names come from `minimalIdentifier` — the maximal form carries the script, and `es` would read
-"Spanish (Latin, Spain)" in a menu that should say "Spanish".
-
-A pair that is supported but not downloaded **opens the panel**, whatever the action's usual result,
-so a shortcut never silently does nothing. **The download happens in System Settings.**
-`prepareTranslation` never showed its sheet over this non-activating panel, so the prompt says where
-to go — Language & Region → Translation Languages… — and its one button opens that pane and closes
-the panel. System Settings has no anchor for the sheet itself, so the last click stays the reader's.
+**The panel's menu overrides the run, never the setting.** The header names the language this run
+translates into — in pair mode that is the detected end of the pair — and the menu lists the same
+languages as the pane. Picking one reruns against it; the setting itself is untouched, so the next
+run detects again.
 
 ## The panel
 
@@ -188,8 +189,9 @@ It could not have been built on `HUDPresenter`: `HUDPanel` sets `ignoresMouseEve
 which is a closed two-case enum measured once at present time — a growing stream would clip.
 
 Non-activating, so the target app keeps its selection while the panel holds key. Keys go through
-`sendEvent`: `↵` replaces, `⌘C` copies, `esc` dismisses; click-away dismisses like every other
-borderless surface. The panel is anchored by its **top-left** and re-measured as the reply arrives —
+`sendEvent`: `↵` replaces, `⌘C` copies, `esc` dismisses, and each footer button names its key.
+Copy is `⌘C` and never a bare `C` — an input method captures letter keys for composition, so a bare
+letter never reaches a key window. Click-away dismisses like every other borderless surface. The panel is anchored by its **top-left** and re-measured as the reply arrives —
 centring on every measure would walk it up the screen. Summarize and custom actions use chat's
 `ChatMarkdownText` and `MarkdownBlock.parse`, keeping the whole result selectable across paragraphs
 and headings, with the same math as chat; `midStream` is on while it runs, so an equation still
@@ -302,12 +304,12 @@ failure handler, so automatic expansion stays silent as before.
   survive a relaunch. Turn that provider off in AI Settings and Summarize follows the shared model.
 - Save a custom action with its own model, delete it, and confirm no route is left in
   `quickActionModelOverrides`.
-- Translate into a language that has not been downloaded: the panel names the language, and its
-  button closes the panel and opens Language & Region.
-- Download English (UK) alone, with English (US) absent, and translate English text: the panel must
-  translate rather than call the target language missing.
-- Translate Korean text with Korean not downloaded and the target language installed: the panel names
-  Korean, the language that is actually missing.
+- Set Translate to "Two languages" with two distinct languages, translate a passage written in the
+  first: the result is in the second. Translate one written in the second: the result is in the first.
+- Set Translate to "One language" and run it: the panel shows a language menu, and picking another
+  language retranslates.
+- Give Translate its own model in the Translate section: the row names it, only Translate uses it, and
+  it survives a relaunch. With "Same as Quick Actions" it follows the shared model.
 - Revoke Accessibility while enabled: a HUD explains instead of failing silently.
 - Harnesses: `quick-action-test` (action metadata, prompt boundaries, preview choices, routes and
   their repair) and

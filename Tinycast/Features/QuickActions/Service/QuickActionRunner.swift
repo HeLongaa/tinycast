@@ -1,10 +1,26 @@
 import AppKit
+import NaturalLanguage
 
 /// Reads the selection and transforms it; replacing the text is the coordinator's call, not this.
 @MainActor
 final class QuickActionRunner {
     /// The ceiling lives here, not at the provider, where it returns as an opaque context error.
     static let maxSelectionBytes = 32_768
+
+    /// The language this run translates into. A pair resolves to its other end here, on device, so
+    /// the model gets one direct instruction — a conditional prompt it answers by echoing the text.
+    static func target(for text: String, in configured: TranslateTarget) -> TranslationLanguage? {
+        switch configured {
+        case .single(let language):
+            return language
+        case .pair(let primary, let secondary):
+            guard let detected = NLLanguageRecognizer.dominantLanguage(for: text) else {
+                return secondary
+            }
+            let code = Locale.Language(identifier: detected.rawValue).languageCode?.identifier
+            return code == primary.code ? secondary : primary
+        }
+    }
 
     /// A borrowed ⌘C synthesises a keystroke into somebody's app, so it is never the first try.
     static func selection(
@@ -38,12 +54,12 @@ final class QuickActionRunner {
     /// No transcript to grow, so a caller showing progress reads `onDelta` and the rest just await.
     static func run(
         _ action: QuickAction, selection: String, using provider: any AIProvider,
-        instructionOverride: String?,
+        instructionOverride: String?, target: TranslationLanguage? = nil,
         onDelta: @MainActor (String) -> Void = { _ in }
     ) async throws -> String {
         let request = AIRequest(
             instructions: QuickActionPrompt.instructions(
-                for: action, override: instructionOverride),
+                for: action, override: instructionOverride, target: target),
             messages: [
                 AIMessage(
                     role: .user,

@@ -182,6 +182,10 @@ enum SettingsBackupCoverage {
             "Custom model instructions change transformed results and must not move unseen.",
         AppSettingsKey.quickActionLanguage.rawValue:
             "Follows the language the person at this Mac reads, not the one who wrote the backup.",
+        AppSettingsKey.quickActionSecondaryLanguage.rawValue:
+            "Follows the language the person at this Mac reads, not the one who wrote the backup.",
+        AppSettingsKey.quickActionTranslateMode.rawValue:
+            "Chooses the direction of that person's own two languages; an import must not choose one.",
         AppSettingsKey.snippetsFolder.rawValue:
             "Names a folder on this Mac; the one a backup lands on may not have it.",
         AppSettingsKey.notesFolder.rawValue:

@@ -79,6 +79,14 @@ struct QuickActionTests {
 
         store.settings.setPreviewsResult(true, for: .fixGrammar)
         store.settings.targetLanguage = "de"
+        expect(
+            store.settings.translateTarget() == .single(.german),
+            "a single target resolves to its language")
+        store.settings.translateMode = .pair
+        store.settings.secondaryLanguage = "en"
+        expect(
+            store.settings.translateTarget() == .pair(primary: .german, secondary: .english),
+            "a pair resolves both of its languages")
         store.settings.setInstructionOverride("Use British English.", for: .fixGrammar)
 
         let reopened = QuickActionSettingsStore(defaults: defaults)
@@ -89,6 +97,9 @@ struct QuickActionTests {
             reopened.settings.previewsResult(BuiltInQuickAction.fixGrammar),
             "a preview choice survives a relaunch")
         expect(reopened.settings.targetLanguage == "de", "the target language survives a relaunch")
+        expect(
+            reopened.settings.translateMode == .pair && reopened.settings.secondaryLanguage == "en",
+            "the translation mode and second language survive a relaunch")
         expect(
             reopened.settings.instructionOverride(for: BuiltInQuickAction.fixGrammar)
                 == "Use British English.",
@@ -157,7 +168,9 @@ struct QuickActionTests {
             "an action with its own route uses it")
         expect(store.model(for: .rewrite) == .appleIntelligence, "an action without one follows")
         expect(store.model(for: custom) == api, "a custom action keeps a route of its own")
-        expect(store.modelOverride(for: .translate) == nil, "Translate never takes a model")
+        expect(
+            store.modelOverride(for: .translate) == .codex(model: "gpt", effort: nil),
+            "Translate takes a model of its own")
 
         let reopened = QuickActionSettingsStore(defaults: defaults)
         expect(
@@ -183,6 +196,7 @@ struct QuickActionTests {
             "an unavailable command drops the route instead of borrowing the fallback")
 
         reopened.setModelOverride(nil, for: .summarize)
+        reopened.setModelOverride(nil, for: .translate)
         expect(
             defaults.data(forKey: AppSettingsKey.quickActionModelOverrides.rawValue) == nil,
             "clearing the last route leaves nothing stored")
@@ -210,11 +224,11 @@ struct QuickActionTests {
             !BuiltInQuickAction.rewrite.replacesDirectlyByDefault,
             "a rewrite changes the voice, so it is previewed by default")
         expect(
-            BuiltInQuickAction.translate.usesTranslationFramework,
-            "Translate goes to Apple's translator, not the model")
+            BuiltInQuickAction.translate.allowsInstructions == false,
+            "Translate's prompt is written by its language settings, not an editor")
         expect(
-            BuiltInQuickAction.allCases.filter(\.usesTranslationFramework) == [.translate],
-            "nothing else claims the translator")
+            BuiltInQuickAction.allCases.filter { !$0.allowsInstructions } == [.translate],
+            "nothing else hides its instruction editor")
         expect(
             BuiltInQuickAction.summarize.showsDiff == false,
             "a summary is not the input edited, so a diff would be noise")
@@ -259,9 +273,15 @@ struct QuickActionTests {
             QuickActionPrompt.instructions(for: BuiltInQuickAction.rewrite, override: "").isEmpty,
             "an empty override deliberately sends no instructions")
         expect(
-            QuickActionPrompt.instructions(for: BuiltInQuickAction.translate, override: "My instructions")
-                == QuickActionPrompt.instructions(for: BuiltInQuickAction.translate),
-            "Translate never accepts model instructions")
+            QuickActionPrompt.instructions(
+                for: BuiltInQuickAction.translate, target: .spanish
+            ).contains("Spanish"),
+            "the target language is named in the prompt")
+        expect(
+            !QuickActionPrompt.instructions(
+                for: BuiltInQuickAction.translate, target: .spanish
+            ).lowercased().contains("if"),
+            "the instruction is direct: a conditional prompt gets answered by echoing the text")
 
         var settings = QuickActionSettings()
         settings.setInstructionOverride("Custom", for: .rewrite)
@@ -331,9 +351,6 @@ struct QuickActionTests {
         expect(!action.alwaysPreviews, "nothing forces a custom action into a panel")
         expect(!action.showsDiff, "an arbitrary prompt is not the input edited, so no diff")
         expect(action.rendersMarkdown, "a custom prompt's Markdown reply renders like Summarize's")
-        expect(
-            !action.usesTranslationFramework,
-            "only the shipped Translate reaches Apple's translator")
         expect(action.id == record.entryID, "a custom action keys everything on its entry id")
         expect(
             CustomQuickAction.id(fromEntryID: record.entryID) == record.id,

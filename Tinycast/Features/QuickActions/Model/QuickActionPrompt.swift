@@ -2,15 +2,20 @@ import Foundation
 
 /// Chat's `AIPreamble` is not sent here: it describes a launcher nobody is asking the model about.
 enum QuickActionPrompt {
-    static func instructions(for action: QuickAction, override: String? = nil) -> String {
+    static func instructions(
+        for action: QuickAction, override: String? = nil, target: TranslationLanguage? = nil
+    ) -> String {
         switch action {
-        case .builtIn(let builtIn): return instructions(for: builtIn, override: override)
+        case .builtIn(let builtIn):
+            return instructions(for: builtIn, override: override, target: target)
         case .custom(let custom): return boundary + "\n\n" + custom.instructions
         }
     }
 
-    static func instructions(for action: BuiltInQuickAction, override: String? = nil) -> String {
-        if !action.usesTranslationFramework, let override { return override }
+    static func instructions(
+        for action: BuiltInQuickAction, override: String? = nil, target: TranslationLanguage? = nil
+    ) -> String {
+        if let override { return override }
         return switch action {
         case .fixGrammar:
             boundary + """
@@ -39,9 +44,12 @@ enum QuickActionPrompt {
             request.
             """
         case .translate:
-            // Apple's translator does this one; exhaustive so a new action cannot forget a prompt.
-            boundary
+            target.map { boundary + "\n\n" + Self.translateInstruction($0) } ?? boundary
         }
+    }
+
+    private static func translateInstruction(_ target: TranslationLanguage) -> String {
+        "Translate the text into \(target.rawValue)."
     }
 
     /// The output lands in somebody's document, and the selection is material, never a request.

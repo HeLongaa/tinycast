@@ -333,8 +333,8 @@ enum SettingsSearchCatalog {
             .quickActionsModel, "Model",
             keywords: ["llm", "ai", "default"]),
         .init(
-            .quickActionsTranslate, "Translate to",
-            keywords: ["language", "locale"])
+            group: .quickActionsTranslate, "Translate",
+            keywords: ["language", "locale", "model", "swap"])
     ]
 
     private static let dictation: [SettingsSearchEntry] = [

@@ -71,7 +71,6 @@ struct QuickActionsSettingsView: View {
                 model: request.action.flatMap { store.modelOverride(for: .custom($0)) })
         }
         .onAppear {
-            core.quickActionCoordinator.loadLanguages()
             store.repairModel(against: aiSettings.connections, fallback: aiSettings.defaultModel)
             store.resolveModel(
                 appleIntelligenceAvailable: aiSettings.isAppleIntelligenceAvailable(),
@@ -125,7 +124,7 @@ struct QuickActionsSettingsView: View {
             Image(systemName: action.symbol)
                 .frame(width: Theme.Size.settingsRowIcon)
         } trailing: {
-            if !action.usesTranslationFramework {
+            if action.allowsInstructions {
                 editButton(title: action.title) { editingAction = action }
             }
             if let entry { AliasField(entry: entry) }
@@ -187,20 +186,50 @@ struct QuickActionsSettingsView: View {
 
     private var languageSection: some View {
         Section {
-            Picker(selection: languageBinding) {
-                Text("Same as this Mac").tag("")
-                ForEach(core.quickActionCoordinator.offeredLanguages, id: \.minimalIdentifier) {
-                    Text(TextTranslator.displayName(of: $0)).tag($0.minimalIdentifier)
+            Picker(selection: modeBinding) {
+                ForEach(TranslateMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
                 }
             } label: {
-                SettingsRowTitle(.quickActionsTranslate, "Translate to")
+                SettingsRowTitle(.quickActionsTranslate, "Mode")
             }
+            if store.settings.translateMode == .single {
+                languagePicker(selection: languageBinding, title: "Translate to")
+            } else {
+                languagePicker(selection: languageBinding, title: "First language")
+                languagePicker(selection: secondaryBinding, title: "Second language")
+            }
+            AIModelSelectionRows(
+                selection: store.modelOverride(for: .builtIn(.translate)),
+                inheritedTitle: String(localized: "Same as Quick Actions"),
+                select: { store.setModelOverride($0, for: .builtIn(.translate)) },
+                modelLabel: {
+                    SettingsRowTitle(.quickActionsTranslate, "Model")
+                    Text("Only translate uses this model.")
+                },
+                effortLabel: {
+                    SettingsRowTitle(.quickActionsTranslate, "Reasoning effort")
+                }
+            )
         } header: {
             SettingsSectionHeader(.quickActionsTranslate)
         } footer: {
-            Text("Apple's translator, on this Mac. A language downloads on first use.")
+            Text("Two languages detects the source and swaps automatically.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func languagePicker(
+        selection: Binding<String>, title: LocalizedStringResource
+    ) -> some View {
+        Picker(selection: selection) {
+            Text("Same as this Mac").tag("")
+            ForEach(TranslationLanguage.menu) { language in
+                Text(language.displayName(locale: .current)).tag(language.code)
+            }
+        } label: {
+            SettingsRowTitle(.quickActionsTranslate, title)
         }
     }
 
@@ -246,6 +275,18 @@ struct QuickActionsSettingsView: View {
         Binding(
             get: { store.settings.targetLanguage },
             set: { store.settings.targetLanguage = $0 })
+    }
+
+    private var secondaryBinding: Binding<String> {
+        Binding(
+            get: { store.settings.secondaryLanguage },
+            set: { store.settings.secondaryLanguage = $0 })
+    }
+
+    private var modeBinding: Binding<TranslateMode> {
+        Binding(
+            get: { store.settings.translateMode },
+            set: { store.settings.translateMode = $0 })
     }
 
     private var modelChoices: [AIModelOption] {

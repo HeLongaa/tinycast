@@ -27,6 +27,11 @@ final class QuickActionSettingsStore {
             as? [String: Bool] ?? [:]
         loaded.targetLanguage =
             defaults.string(forKey: AppSettingsKey.quickActionLanguage.rawValue) ?? ""
+        loaded.secondaryLanguage =
+            defaults.string(forKey: AppSettingsKey.quickActionSecondaryLanguage.rawValue) ?? ""
+        loaded.translateMode =
+            defaults.string(forKey: AppSettingsKey.quickActionTranslateMode.rawValue)
+                .flatMap(TranslateMode.init(rawValue:)) ?? .single
         loaded.storedInstructionOverrides =
             defaults.dictionary(forKey: AppSettingsKey.quickActionInstructions.rawValue)
             as? [String: String] ?? [:]
@@ -54,7 +59,7 @@ final class QuickActionSettingsStore {
     }
 
     func setModelOverride(_ selection: AIModelSelection?, for action: QuickAction) {
-        guard !action.usesTranslationFramework, modelOverrides[action.id] != selection else { return }
+        guard modelOverrides[action.id] != selection else { return }
         modelOverrides[action.id] = selection
     }
 
@@ -119,6 +124,10 @@ final class QuickActionSettingsStore {
         defaults.set(
             settings.storedPreviewChoices, forKey: AppSettingsKey.quickActionPreviews.rawValue)
         defaults.set(settings.targetLanguage, forKey: AppSettingsKey.quickActionLanguage.rawValue)
+        defaults.set(
+            settings.secondaryLanguage, forKey: AppSettingsKey.quickActionSecondaryLanguage.rawValue)
+        defaults.set(
+            settings.translateMode.rawValue, forKey: AppSettingsKey.quickActionTranslateMode.rawValue)
         defaults.set(
             settings.storedInstructionOverrides,
             forKey: AppSettingsKey.quickActionInstructions.rawValue)

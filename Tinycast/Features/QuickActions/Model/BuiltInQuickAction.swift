@@ -44,5 +44,6 @@ enum BuiltInQuickAction: String, CaseIterable, Codable, Identifiable, Sendable {
 
     var showsDiff: Bool { self == .fixGrammar || self == .rewrite }
 
-    var usesTranslationFramework: Bool { self == .translate }
+    /// Translate's prompt is written by its language settings, not a reader-edited instruction.
+    var allowsInstructions: Bool { self != .translate }
 }
